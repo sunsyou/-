@@ -12,14 +12,21 @@ const __dirname = path.dirname(__filename);
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log(`Created uploads directory at: ${uploadsDir}`);
+  } catch (err) {
+    console.error(`Failed to create uploads directory: ${err}`);
+  }
 }
-
-const db = new Database("portfolio.db");
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
+    // Double check if directory exists before saving
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
@@ -27,9 +34,19 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   },
 });
-const upload = multer({ storage });
+
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  }
+});
 
 // Initialize database
+const dbPath = path.join(__dirname, "portfolio.db");
+const db = new Database(dbPath);
+console.log(`Database initialized at: ${dbPath}`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS portfolios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,16 +75,30 @@ async function startServer() {
   app.use("/uploads", express.static(uploadsDir));
 
   // API Routes
-  app.post("/api/upload", upload.single("file"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ url: fileUrl });
+  app.post("/api/upload", (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        console.error("Single upload error:", err);
+        return res.status(500).json({ error: err.message || "Upload failed" });
+      }
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const fileUrl = `/uploads/${req.file.filename}`;
+      console.log(`File uploaded: ${fileUrl}`);
+      res.json({ url: fileUrl });
+    });
   });
 
-  app.post("/api/upload-multiple", upload.array("files"), (req, res) => {
-    if (!req.files || (req.files as any).length === 0) return res.status(400).json({ error: "No files uploaded" });
-    const urls = (req.files as any).map((file: any) => `/uploads/${file.filename}`);
-    res.json({ urls });
+  app.post("/api/upload-multiple", (req, res, next) => {
+    upload.array("files")(req, res, (err) => {
+      if (err) {
+        console.error("Multiple upload error:", err);
+        return res.status(500).json({ error: err.message || "Upload failed" });
+      }
+      if (!req.files || (req.files as any).length === 0) return res.status(400).json({ error: "No files uploaded" });
+      const urls = (req.files as any).map((file: any) => `/uploads/${file.filename}`);
+      console.log(`Multiple files uploaded: ${urls.length} files`);
+      res.json({ urls });
+    });
   });
 
   app.get("/api/portfolios", (req, res) => {
