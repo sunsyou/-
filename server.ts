@@ -205,6 +205,15 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Global error handler for API routes
+  app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("API Error:", err);
+    res.status(err.status || 500).json({ 
+      error: err.message || "Internal server error",
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  });
 }
 
 startServer();

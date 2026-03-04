@@ -379,18 +379,44 @@ const AdminPage = ({ portfolios, onRefresh }: { portfolios: Portfolio[], onRefre
         const formData = new FormData();
         formData.append('file', files[0]);
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          let errorMessage = `Upload failed (${res.status})`;
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorMessage;
+          } catch (e) {
+            errorMessage = errorText.slice(0, 100) || errorMessage;
+          }
+          throw new Error(errorMessage);
+        }
+        
         const data = await res.json();
         setEditingPortfolio(prev => prev ? { ...prev, thumbnail: data.url } : null);
       } else {
         const formData = new FormData();
         Array.from(files).forEach(file => formData.append('files', file as File));
         const res = await fetch('/api/upload-multiple', { method: 'POST', body: formData });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          let errorMessage = `Upload failed (${res.status})`;
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorMessage;
+          } catch (e) {
+            errorMessage = errorText.slice(0, 100) || errorMessage;
+          }
+          throw new Error(errorMessage);
+        }
+        
         const data = await res.json();
         setEditingPortfolio(prev => prev ? { ...prev, images: [...(prev.images || []), ...data.urls] } : null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Upload failed', err);
-      alert('Upload failed');
+      alert(err.message || 'Upload failed');
     } finally {
       setIsUploading(false);
     }
